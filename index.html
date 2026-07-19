@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>オンライン指遊び</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-app-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-database-compat.min.js"></script>
+<style>
+  :root{
+    --bg:#F5F1E6; --card:#FFFDF8; --line:#E4DCC8;
+    --p1:#0F8B8D; --p1-l:#BFE8E4;
+    --p2:#E8637A; --p2-l:#FBD3DA;
+    --text:#2B2B2E; --muted:#8A8577;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body{
+    margin:0; min-height:100vh; background:var(--bg);
+    font-family:'Nunito',sans-serif; color:var(--text);
+    display:flex; align-items:center; justify-content:center; padding:18px 12px;
+  }
+  .sheet{ width:100%; max-width:460px; background:var(--card); border-radius:26px;
+    padding:22px 20px 26px; box-shadow:0 18px 40px rgba(60,50,20,0.12); border:1px solid var(--line); }
+  h1{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:1.7rem; text-align:center; margin:0 0 4px; }
+  h2{ font-family:'Baloo 2',sans-serif; font-weight:700; font-size:1.2rem; text-align:center; margin:0 0 14px; }
+  p.sub{ text-align:center; color:var(--muted); font-size:0.85rem; margin:0 0 18px; line-height:1.5; }
+  .cards{ display:flex; flex-direction:column; gap:12px; }
+  .gcard{ display:flex; align-items:center; gap:14px; background:#FBF8F0; border:1px solid var(--line);
+    border-radius:16px; padding:14px 16px; cursor:pointer; text-align:left; }
+  .gcard:active{ transform:scale(0.98); }
+  .gcard .emoji{ font-size:1.8rem; }
+  .gcard .label{ font-family:'Baloo 2',sans-serif; font-weight:700; font-size:1.05rem; }
+  .gcard .desc{ color:var(--muted); font-size:0.78rem; margin-top:2px; }
+  .btn{ font-family:'Baloo 2',sans-serif; font-weight:700; font-size:0.95rem; color:#fff;
+    background:var(--p1); border:none; border-radius:999px; padding:12px 22px; cursor:pointer; width:100%; }
+  .btn:active{ transform:scale(0.97); }
+  .btn.ghost{ background:#FBF8F0; color:var(--text); border:1px solid var(--line); }
+  .btn.b2{ background:var(--p2); }
+  input.code{ font-family:'Baloo 2',sans-serif; font-size:1.4rem; text-align:center; letter-spacing:4px;
+    padding:12px; border-radius:14px; border:1px solid var(--line); width:100%; background:#FBF8F0; color:var(--text); }
+  .codebig{ font-family:'Baloo 2',sans-serif; font-size:2.2rem; text-align:center; letter-spacing:6px;
+    color:var(--p1); margin:10px 0; }
+  .center{ text-align:center; }
+  .muted{ color:var(--muted); font-size:0.85rem; }
+  .scorebar{ display:flex; align-items:center; justify-content:space-between; background:#FBF8F0;
+    border:1px solid var(--line); border-radius:18px; padding:10px 16px; margin-bottom:14px; }
+  .score{ display:flex; align-items:center; gap:8px; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:1.05rem; }
+  .dot{ width:16px; height:16px; border-radius:50%; }
+  .dot.p1{ background:var(--p1); } .dot.p2{ background:var(--p2); }
+  .turn{ text-align:center; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:1rem;
+    padding:9px 0; border-radius:14px; margin-bottom:16px; color:#fff; }
+  .turn.p1{ background:var(--p1); } .turn.p2{ background:var(--p2); } .turn.wait{ background:var(--muted); }
+  .stepper{ display:flex; align-items:center; justify-content:center; gap:16px; margin:10px 0 18px; }
+  .stepper button{ width:44px; height:44px; border-radius:50%; border:none; background:var(--p1); color:#fff;
+    font-size:1.3rem; font-weight:800; cursor:pointer; }
+  .stepper .val{ font-family:'Baloo 2',sans-serif; font-size:1.6rem; min-width:44px; text-align:center; }
+  .grid4{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0; }
+  .dirbtn{ background:#FBF8F0; border:2px solid var(--line); border-radius:16px; padding:20px 0;
+    font-size:1.8rem; text-align:center; cursor:pointer; }
+  .dirbtn.sel{ border-color:var(--p1); background:var(--p1-l); }
+  .hands{ display:flex; justify-content:space-around; margin:16px 0; }
+  .handbtn{ width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-family:'Baloo 2',sans-serif; font-weight:800; font-size:1.3rem; border:3px solid var(--line);
+    background:#FBF8F0; cursor:pointer; }
+  .handbtn.dead{ opacity:0.3; cursor:not-allowed; }
+  .handbtn.mine{ border-color:var(--p1); }
+  .handbtn.theirs{ border-color:var(--p2); }
+  .handbtn.picked{ background:#FFE9A8; }
+  .playerlabel{ text-align:center; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:0.85rem;
+    color:var(--muted); margin-bottom:4px; }
+  .reveal{ background:#FBF8F0; border:1px solid var(--line); border-radius:16px; padding:16px; margin:14px 0; text-align:center; }
+  .reveal .row2{ display:flex; justify-content:space-around; margin:10px 0; }
+  .reveal .who{ font-family:'Baloo 2',sans-serif; font-weight:700; }
+  .result{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:1.1rem; margin:8px 0; }
+  .backlink{ text-align:center; margin-top:14px; }
+  .backlink a{ color:var(--muted); font-size:0.82rem; cursor:pointer; text-decoration:underline; }
+  .spinner{ width:28px; height:28px; border:4px solid var(--line); border-top-color:var(--p1);
+    border-radius:50%; margin:14px auto; animation:spin 0.8s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .overlay{ position:fixed; inset:0; background:rgba(30,26,18,0.45); display:flex; align-items:center;
+    justify-content:center; padding:20px; opacity:0; pointer-events:none; transition:opacity 0.2s ease; z-index:10; }
+  .overlay.show{ opacity:1; pointer-events:auto; }
+  .modal{ background:var(--card); border-radius:22px; padding:28px 24px; text-align:center; max-width:300px; width:100%; }
+  .modal h2{ font-size:1.4rem; margin-bottom:8px; }
+  .actionrow{ display:flex; flex-direction:column; gap:10px; }
+  .err{ background:#FBE4E4; border:1px solid #E8B4B4; color:#8A2E2E; border-radius:12px; padding:10px 14px;
+    font-size:0.8rem; margin-bottom:14px; text-align:center; }
+</style>
+</head>
+<body>
+<div class="sheet" id="app"></div>
+
+<script>
+/* ---------- Firebase setup ---------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyBp9ryKaXAxtUwY_febQEnG5nr7hvx9gdI",
+  authDomain: "yubi-e0e26.firebaseapp.com",
+  databaseURL: "https://yubi-e0e26-default-rtdb.firebaseio.com/",
+  projectId: "yubi-e0e26",
+  storageBucket: "yubi-e0e26.firebasestorage.app",
+  messagingSenderId: "166102664851",
+  appId: "1:166102664851:web:a073725683fb40a87e6f66"
+};
+let db = null;
+let fbInitError = null;
+try{
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.database();
+} catch(e){
+  fbInitError = e && e.message ? e.message : String(e);
+  console.error('Firebase init error', e);
+}
+
+async function fGet(path){
+  if (!db) return null;
+  try{
+    const snap = await db.ref(path).get();
+    return snap.exists() ? snap.val() : null;
+  } catch(e){ console.error('fGet error', path, e && e.message); return null; }
+}
+async function fSet(path, value){
+  if (!db) return false;
+  try{
+    await db.ref(path).set(value);
+    return true;
+  } catch(e){ console.error('fSet error', path, e && e.message); return false; }
+}
+
+/* ---------- app state ---------- */
+const GAMES = {
+  sum:  { name:'指スマ', emoji:'🖐️', desc:'指の数を出して合計を当てよう' },
+  acchi:{ name:'あっち向いてホイ', emoji:'👉', desc:'方向を当てっこするゲーム' },
+  chop: { name:'指戦争', emoji:'✊', desc:'指の数を足していく対戦ゲーム' }
+};
+let state = { screen:'home', game:null, code:null, myRole:null, room:null, inputCode:'', listenerRef:null };
+
+function goHome(){
+  detachListener();
+  state = { screen:'home', game:null, code:null, myRole:null, room:null, inputCode:'', listenerRef:null };
+  render();
+}
+
+function chooseGame(g){
+  state.game = g; state.screen = 'lobby'; state.inputCode=''; render();
+}
+
+function randCode(){ return String(Math.floor(1000 + Math.random()*9000)); }
+
+function detachListener(){
+  if (state.listenerRef){
+    state.listenerRef.off('value', state.listenerCb);
+    state.listenerRef = null; state.listenerCb = null;
+  }
+}
+
+function attachListener(code){
+  detachListener();
+  const ref = db.ref('rooms/'+code);
+  const cb = (snap) => {
+    const room = snap.exists() ? snap.val() : null;
+    if (!room) return;
+    state.room = room;
+    if (state.screen === 'waiting' && room.status === 'playing'){ state.screen = 'game'; }
+    render();
+  };
+  ref.on('value', cb);
+  state.listenerRef = ref; state.listenerCb = cb;
+}
+
+/* ---------- per-game state init ---------- */
+function initGameState(game){
+  if (game === 'chop') return { hands:{ p1:[1,1], p2:[1,1] } };
+  return { placeholder:true };
+}
+
+async function createRoom(){
+  if (!db){ alert('データベースに接続できません。通信環境を確認してもう一度試してね'); return; }
+  const code = randCode();
+  const room = {
+    game: state.game,
+    players: { p1:true, p2:false },
+    status:'waiting',
+    scoreP1:0, scoreP2:0,
+    round:1,
+    pending:{ p1:null, p2:null },
+    lastReveal:null,
+    winner:null,
+    gs: initGameState(state.game),
+    turn:'p1',
+    updatedAt: Date.now()
+  };
+  const ok = await fSet('rooms/'+code, room);
+  if (!ok){ alert('部屋を作れませんでした。もう一度試してね'); return; }
+  state.code = code; state.myRole = 'p1'; state.room = room; state.screen='waiting';
+  render();
+  attachListener(code);
+}
+
+async function joinRoom(){
+  if (!db){ alert('データベースに接続できません。通信環境を確認してもう一度試してね'); return; }
+  const code = state.inputCode.trim();
+  if (code.length !== 4){ alert('4けたのコードを いれてね'); return; }
+  const room = await fGet('rooms/'+code);
+  if (!room){ alert('その部屋は見つからないよ'); return; }
+  if (room.players.p2){ alert('その部屋はもう2人そろっているよ'); return; }
+  room.players.p2 = true; room.status = 'playing'; room.updatedAt = Date.now();
+  const ok = await fSet('rooms/'+code, room);
+  if (!ok){ alert('参加に失敗しました。もう一度試してね'); return; }
+  state.code = code; state.myRole = 'p2'; state.room = room; state.game = room.game;
+  state.screen = 'game';
+  render();
+  attachListener(code);
+}
+
+/* ---------- render root ---------- */
+function render(){
+  const app = document.getElementById('app');
+  if (state.screen === 'home') app.innerHTML = renderHome();
+  else if (state.screen === 'lobby') app.innerHTML = renderLobby();
+  else if (state.screen === 'waiting') app.innerHTML = renderWaiting();
+  else if (state.screen === 'game') app.innerHTML = renderGame();
+}
+
+function renderHome(){
+  let cards = Object.keys(GAMES).map(k => {
+    const g = GAMES[k];
+    return `<div class="gcard" onclick="chooseGame('${k}')">
+      <div class="emoji">${g.emoji}</div>
+      <div><div class="label">${g.name}</div><div class="desc">${g.desc}</div></div>
+    </div>`;
+  }).join('');
+  const errBanner = fbInitError ? `<div class="err">Firebase接続エラー: ${fbInitError}</div>` : '';
+  return `
+    ${errBanner}
+    <h1>🎮 オンライン指遊び</h1>
+    <p class="sub">2人でコードを合わせて、はなれてても遊べるよ</p>
+    <div class="cards">${cards}</div>
+    <div style="margin-top:14px;">
+      <button class="btn ghost" onclick="testConnection()">接続テスト</button>
+    </div>
+  `;
+}
+
+async function testConnection(){
+  if (!db){ alert('DB未初期化: ' + (fbInitError||'不明なエラー')); return; }
+  const ok = await fSet('conntest', { hello:'world', t: Date.now() });
+  if (!ok){ alert('書き込み失敗'); return; }
+  const got = await fGet('conntest');
+  if (got && got.hello === 'world'){ alert('OK！ Firebaseに接続できています。'); }
+  else { alert('読み出し失敗'); }
+}
+
+function renderLobby(){
+  const g = GAMES[state.game];
+  return `
+    <h2>${g.emoji} ${g.name}</h2>
+    <button class="btn" onclick="createRoom()">部屋をつくる</button>
+    <p class="center muted" style="margin:14px 0 6px;">──　または　──</p>
+    <input class="code" maxlength="4" inputmode="numeric" placeholder="コードを入力" id="codeInput"
+      oninput="state.inputCode=this.value.replace(/[^0-9]/g,'')" value="${state.inputCode}">
+    <div style="height:10px"></div>
+    <button class="btn b2" onclick="joinRoom()">部屋に入る</button>
+    <div class="backlink"><a onclick="goHome()">← もどる</a></div>
+  `;
+}
+
+function renderWaiting(){
+  return `
+    <h2>${GAMES[state.game].name}</h2>
+    <p class="center muted">このコードを あいてに おしえてね</p>
+    <div class="codebig">${state.code}</div>
+    <div class="spinner"></div>
+    <p class="center muted">あいてが 入るのを まってるよ…</p>
+    <div class="backlink"><a onclick="goHome()">← やめる</a></div>
+  `;
+}
+
+function renderGame(){
+  const room = state.room;
+  if (!room) return '<div class="center muted">読み込み中…</div>';
+  if (room.game === 'sum') return renderSum(room);
+  if (room.game === 'acchi') return renderAcchi(room);
+  if (room.game === 'chop') return renderChop(room);
+  return '';
+}
+
+function scoreBarHtml(room){
+  return `<div class="scorebar">
+    <div class="score"><span class="dot p1"></span>${room.scoreP1}</div>
+    <div class="muted">ラウンド ${room.round}</div>
+    <div class="score">${room.scoreP2}<span class="dot p2"></span></div>
+  </div>`;
+}
+
+function winnerModal(room){
+  if (!room.winner) return '';
+  const w = room.winner === 'draw' ? '引き分け！' : (room.winner === state.myRole ? 'あなたの かち！🎉' : 'あいての かち');
+  return `<div class="overlay show"><div class="modal">
+    <h2>${w}</h2>
+    <p class="muted">${room.scoreP1} - ${room.scoreP2}</p>
+    <div class="actionrow" style="margin-top:16px;">
+      <button class="btn" onclick="rematch()">もう一度</button>
+      <button class="btn ghost" onclick="goHome()">ホームへ</button>
+    </div>
+  </div></div>`;
+}
+
+async function rematch(){
+  const room = state.room;
+  room.scoreP1 = 0; room.scoreP2 = 0; room.round = 1; room.winner = null;
+  room.pending = {p1:null,p2:null}; room.lastReveal = null; room.gs = initGameState(room.game); room.turn='p1';
+  room.updatedAt = Date.now();
+  await fSet('rooms/'+state.code, room);
+}
+
+/* ================= 指スマ ================= */
+let sumPick = { fingers:0, guess:0 };
+function renderSum(room){
+  if (room.winner) return scoreBarHtml(room) + winnerModal(room);
+  const myPending = room.pending[state.myRole];
+  const oppRole = state.myRole === 'p1' ? 'p2' : 'p1';
+  const oppPending = room.pending[oppRole];
+
+  if (!myPending){
+    return scoreBarHtml(room) + `
+      <p class="center muted">出す指の数と、合計の予想を決めてね</p>
+      <p class="playerlabel">出す指の数</p>
+      <div class="stepper">
+        <button onclick="sumAdjust('fingers',-1)">−</button>
+        <div class="val" id="fv">${sumPick.fingers}</div>
+        <button onclick="sumAdjust('fingers',1)">＋</button>
+      </div>
+      <p class="playerlabel">合計の予想</p>
+      <div class="stepper">
+        <button onclick="sumAdjust('guess',-1)">−</button>
+        <div class="val" id="gv">${sumPick.guess}</div>
+        <button onclick="sumAdjust('guess',1)">＋</button>
+      </div>
+      <button class="btn" onclick="sumSubmit()">これでけってい</button>
+    `;
+  }
+  if (myPending && !oppPending){
+    return scoreBarHtml(room) + `
+      <p class="center muted">けってい済み</p>
+      <div class="spinner"></div>
+      <p class="center muted">あいてを まってるよ…</p>
+    `;
+  }
+  return scoreBarHtml(room) + renderSumReveal(room);
+}
+function sumAdjust(key, d){
+  if (key==='fingers') sumPick.fingers = Math.max(0, Math.min(5, sumPick.fingers+d));
+  else sumPick.guess = Math.max(0, Math.min(10, sumPick.guess+d));
+  render();
+}
+async function sumSubmit(){
+  const room = await fGet('rooms/'+state.code);
+  room.pending[state.myRole] = { fingers:sumPick.fingers, guess:sumPick.guess };
+  const p1 = room.pending.p1, p2 = room.pending.p2;
+  if (p1 && p2){
+    const total = p1.fingers + p2.fingers;
+    const p1hit = p1.guess === total, p2hit = p2.guess === total;
+    room.lastReveal = { p1, p2, total, p1hit, p2hit };
+    if (p1hit && !p2hit) room.scoreP1++;
+    else if (p2hit && !p1hit) room.scoreP2++;
+    if (room.scoreP1 >= 3){ room.winner='p1'; }
+    else if (room.scoreP2 >= 3){ room.winner='p2'; }
+  }
+  room.updatedAt = Date.now();
+  await fSet('rooms/'+state.code, room);
+  sumPick = {fingers:0,guess:0};
+}
+function renderSumReveal(room){
+  const r = room.lastReveal;
+  if (!r) return '<div class="spinner"></div>';
+  let resText = '引き分け（つぎへ）';
+  if (r.p1hit && !r.p2hit) resText = 'あお の かち！';
+  else if (r.p2hit && !r.p1hit) resText = 'もも の かち！';
+  else if (r.p1hit && r.p2hit) resText = '両方 せいかい！';
+  return `
+    <div class="reveal">
+      <p class="muted">合計は <b>${r.total}</b> だったよ</p>
+      <div class="row2">
+        <div><div class="who" style="color:var(--p1)">あお</div>指:${r.p1.fingers} 予想:${r.p1.guess}</div>
+        <div><div class="who" style="color:var(--p2)">もも</div>指:${r.p2.fingers} 予想:${r.p2.guess}</div>
+      </div>
+      <div class="result">${resText}</div>
+    </div>
+    <button class="btn" onclick="sumNextRound()">つぎのラウンドへ</button>
+  `;
+}
+async function sumNextRound(){
+  const room = await fGet('rooms/'+state.code);
+  if (room.winner) return;
+  room.pending = {p1:null,p2:null}; room.lastReveal = null; room.round++;
+  room.updatedAt = Date.now();
+  await fSet('rooms/'+state.code, room);
+}
+
+/* ================= あっち向いてホイ ================= */
+let acchiPick = null;
+const DIRS = [ {k:'up',e:'⬆️'}, {k:'left',e:'⬅️'}, {k:'right',e:'➡️'}, {k:'down',e:'⬇️'} ];
+function renderAcchi(room){
+  if (room.winner) return scoreBarHtml(room) + winnerModal(room);
+  const pointerRole = (room.round % 2 === 1) ? 'p1' : 'p2';
+  const myRoleLabel = state.myRole === pointerRole ? 'ゆびさす ひと' : 'よける ひと';
+  const myPending = room.pending[state.myRole];
+  const oppRole = state.myRole === 'p1' ? 'p2' : 'p1';
+  const oppPending = room.pending[oppRole];
+
+  let dirButtons = DIRS.map(d => `<div class="dirbtn ${acchiPick===d.k?'sel':''}" onclick="acchiPickDir('${d.k}')">${d.e}</div>`).join('');
+
+  if (!myPending){
+    return scoreBarHtml(room) + `
+      <p class="center muted">今回のあなたの役目：<b>${myRoleLabel}</b></p>
+      <div class="grid4">${dirButtons}</div>
+      <button class="btn" onclick="acchiSubmit()">これでけってい</button>
+    `;
+  }
+  if (myPending && !oppPending){
+    return scoreBarHtml(room) + `
+      <p class="center muted">今回のあなたの役目：<b>${myRoleLabel}</b></p>
+      <div class="spinner"></div>
+      <p class="center muted">あいてを まってるよ…</p>
+    `;
+  }
+  return scoreBarHtml(room) + renderAcchiReveal(room, pointerRole);
+}
+function acchiPickDir(k){ acchiPick = k; render(); }
+async function acchiSubmit(){
+  if (!acchiPick){ alert('方向を えらんでね'); return; }
+  const room = await fGet('rooms/'+state.code);
+  room.pending[state.myRole] = acchiPick;
+  const p1 = room.pending.p1, p2 = room.pending.p2;
+  if (p1 && p2){
+    const pointerRole = (room.round % 2 === 1) ? 'p1' : 'p2';
+    const lookerRole = pointerRole === 'p1' ? 'p2' : 'p1';
+    const match = room.pending[pointerRole] === room.pending[lookerRole];
+    room.lastReveal = { p1, p2, pointerRole, match };
+    if (match){ if (pointerRole==='p1') room.scoreP1++; else room.scoreP2++; }
+    if (room.scoreP1 >= 3) room.winner='p1';
+    else if (room.scoreP2 >= 3) room.winner='p2';
+  }
+  room.updatedAt = Date.now();
+  await fSet('rooms/'+state.code, room);
+  acchiPick = null;
+}
+function dirEmoji(k){ return DIRS.find(d=>d.k===k).e; }
+function renderAcchiReveal(room, pointerRole){
+  const r = room.lastReveal;
+  if (!r) return '<div class="spinner"></div>';
+  const winnerLabel = r.match ? (r.pointerRole==='p1' ? 'あお' : 'もも') + ' の かち！' : 'はずれ（つぎへ）';
+  return `
+    <div class="reveal">
+      <div class="row2">
+        <div><div class="who" style="color:var(--p1)">あお</div>${dirEmoji(r.p1)}</div>
+        <div><div class="who" style="color:var(--p2)">もも</div>${dirEmoji(r.p2)}</div>
+      </div>
+      <div class="result">${winnerLabel}</div>
+    </div>
+    <button class="btn" onclick="acchiNextRound()">つぎのラウンドへ</button>
+  `;
+}
+async function acchiNextRound(){
+  const room = await fGet('rooms/'+state.code);
+  if (room.winner) return;
+  room.pending = {p1:null,p2:null}; room.lastReveal = null; room.round++;
+  room.updatedAt = Date.now();
+  await fSet('rooms/'+state.code, room);
+}
+
+/* ================= 指戦争 (チョップスティックス) ================= */
+let chopSel = { myHand:null, mode:null };
+let splitVals = [0,0];
+function renderChop(room){
+  if (room.winner) return scoreLessHeader() + winnerModal(room);
+  const gs = room.gs;
+  const myHands = gs.hands[state.myRole];
+  const oppRole = state.myRole==='p1' ? 'p2' : 'p1';
+  const oppHands = gs.hands[oppRole];
+  const myTurn = room.turn === state.myRole;
+
+  let html = scoreLessHeader();
+  html += `<div class="turn ${myTurn?state.myRole:'wait'}">${myTurn ? 'あなたの ばん' : 'あいての ばん'}</div>`;
+
+  html += `<p class="playerlabel">あいて</p><div class="hands">`;
+  oppHands.forEach((v,i)=>{
+    const dead = v<=0;
+    const canTarget = (!dead && myTurn && chopSel.mode==='attack');
+    html += `<div class="handbtn theirs ${dead?'dead':''}"
+      onclick="${canTarget?`chopPickTarget(${i})`:''}">${dead?'✕':v}</div>`;
+  });
+  html += `</div>`;
+
+  html += `<p class="playerlabel">あなた</p><div class="hands">`;
+  myHands.forEach((v,i)=>{
+    const dead = v<=0;
+    const picked = chopSel.myHand===i;
+    html += `<div class="handbtn mine ${dead?'dead':''} ${picked?'picked':''}"
+      onclick="${myTurn?`chopPickMyHand(${i})`:''}">${dead?'✕':v}</div>`;
+  });
+  html += `</div>`;
+
+  if (myTurn){
+    if (chopSel.mode === 'split'){
+      const total = myHands[0] + myHands[1];
+      html += `
+        <p class="center muted">合計 ${total} を 2つの手に わけてね</p>
+        <div class="stepper">
+          <button onclick="splitAdjust(-1)">−</button>
+          <div class="val">${splitVals[0]} / ${splitVals[1]}</div>
+          <button onclick="splitAdjust(1)">＋</button>
+        </div>
+        <button class="btn" onclick="chopDoSplit()">これでわける</button>
+        <button class="btn ghost" onclick="chopCancel()">やめる</button>
+      `;
+    } else if (chopSel.mode === 'attack'){
+      html += `<p class="center muted">じぶんの手をえらんだよ。あいての手をタップしてね</p>
+        <button class="btn ghost" onclick="chopCancel()">やめる</button>`;
+    } else {
+      html += `<p class="center muted">じぶんの手をタップして「こうげき」、または「わける」を選んでね</p>
+        <button class="btn ghost" onclick="chopStartSplit()">手をわける</button>`;
+    }
+  } else {
+    html += `<p class="center muted">あいての手番だよ</p>`;
+  }
+  return html;
+}
+function scoreLessHeader(){ return `<h2 style="margin-bottom:10px;">${GAMES.chop.emoji} 指戦争</h2>`; }
+function chopPickMyHand(i){
+  const gs = state.room.gs;
+  if (gs.hands[state.myRole][i] <= 0) return;
+  chopSel = { myHand:i, mode:'attack' };
+  render();
+}
+function chopStartSplit(){
+  const gs = state.room.gs;
+  const [a,b] = gs.hands[state.myRole];
+  splitVals = [a,b];
+  chopSel = { myHand:null, mode:'split' };
+  render();
+}
+function splitAdjust(d){
+  const total = splitVals[0]+splitVals[1];
+  let a = splitVals[0] + d;
+  if (a < 0 || a > Math.min(4,total)) return;
+  let b = total - a;
+  if (b > 4) return;
+  splitVals = [a,b];
+  render();
+}
+function chopCancel(){ chopSel = {myHand:null, mode:null}; render(); }
+
+async function chopPickTarget(oppIdx){
+  const room = await fGet('rooms/'+state.code);
+  const gs = room.gs;
+  const oppRole = state.myRole==='p1' ? 'p2' : 'p1';
+  const myVal = gs.hands[state.myRole][chopSel.myHand];
+  if (myVal <= 0 || gs.hands[oppRole][oppIdx] <= 0){ chopCancel(); return; }
+  gs.hands[oppRole][oppIdx] = (gs.hands[oppRole][oppIdx] + myVal) % 5;
+  await finishChopTurn(room, gs);
+}
+async function chopDoSplit(){
+  const room = await fGet('rooms/'+state.code);
+  const gs = room.gs;
+  const cur = gs.hands[state.myRole];
+  if (splitVals[0]===cur[0] && splitVals[1]===cur[1]){ alert('同じ組み合わせだよ。変えてね'); return; }
+  if (splitVals[0]>4 || splitVals[1]>4 || splitVals[0]<0 || splitVals[1]<0){ alert('1つの手は0〜4だよ'); return; }
+  gs.hands[state.myRole] = [splitVals[0], splitVals[1]];
+  await finishChopTurn(room, gs);
+}
+async function finishChopTurn(room, gs){
+  room.gs = gs;
+  const oppRole = state.myRole==='p1' ? 'p2' : 'p1';
+  const oppDead = gs.hands[oppRole][0]<=0 && gs.hands[oppRole][1]<=0;
+  if (oppDead){ room.winner = state.myRole; }
+  room.turn = oppRole;
+  room.updatedAt = Date.now();
+  await fSet('rooms/'+state.code, room);
+  chopSel = {myHand:null, mode:null};
+}
+
+/* ---------- init ---------- */
+render();
+</script>
+</body>
+</html>
